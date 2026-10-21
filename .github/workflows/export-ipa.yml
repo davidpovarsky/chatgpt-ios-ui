@@ -1,0 +1,48 @@
+name: Export original ChatGPT UI demo IPA
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/export-ipa.yml'
+permissions:
+  contents: read
+jobs:
+  ipa:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.4.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build original demo for physical iOS devices
+        working-directory: Examples/ChatGPTUIDemo
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ChatGPTUIDemo.xcodeproj \
+            -scheme ChatGPTUIDemo \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/ChatGPTUIDemoDerived" \
+            CODE_SIGNING_ALLOWED=NO \
+            | tee "$RUNNER_TEMP/build.log" | tail -n 80
+      - name: Package original demo with widget extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ChatGPTUIDemoDerived/Build/Products/Release-iphoneos/ChatGPTUIDemo.app"
+          test -d "$APP"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          test -d Payload/ChatGPTUIDemo.app/PlugIns/ChatGPTDemoWidgets.appex
+          zip -qry ChatGPTUIDemo-unsigned.ipa Payload
+          unzip -l ChatGPTUIDemo-unsigned.ipa | tail -n 5
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChatGPTUIDemo-unsigned-IPA
+          path: ChatGPTUIDemo-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 30
